@@ -1,6 +1,35 @@
 import 'package:flutter/material.dart';
 
-void main() {
+import 'dart:io' show Platform;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart';
+import 'data/local/local_store.dart';
+import 'models/job.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
+  // Temporary test to prove SQLite works before wiring up UI.
+  final store = await LocalStore.open();
+  final job = Job(
+    id: 'job-001',
+    title: 'Daily walkaround',
+    aircraftRef: 'G-BAE1',
+    status: JobStatus.open,
+    updatedAt: DateTime.now(),
+    syncStatus: SyncStatus.pending,
+  );
+
+  await store.upsertJob(job);
+  final all = await store.getAllJobs();
+  debugPrint('Jobs in DB: ${all.length}');
+  await store.close();
+
   runApp(const MyApp());
 }
 
