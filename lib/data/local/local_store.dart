@@ -11,10 +11,11 @@ class LocalStore {
   final Database _db;
 
   static const _dbName = 'rampcheck.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
 
   static const jobsTable = 'jobs';
-
+  static const inspectionItemsTable = 'inspection_items';
+  
   /// Open (or create) the database.
   static Future<LocalStore> open() async {
     final dir = await getApplicationDocumentsDirectory();
