@@ -41,6 +41,44 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     });
   }
 
+  // Sets card tint to green for pass and red for fail.
+  Color? _cardTint(InspectionResult result) {
+    return switch (result) {
+      InspectionResult.pass => Colors.green.withOpacity(0.20),
+      InspectionResult.fail => Colors.red.withOpacity(0.20),
+      InspectionResult.na => null,
+    };
+  }
+
+  // Sets colour for result icon and labels.
+  Color _resultColor(InspectionResult result) {
+    return switch (result) {
+      InspectionResult.pass => Colors.green,
+      InspectionResult.fail => Colors.red,
+      InspectionResult.na => Colors.grey,
+    };
+  }
+
+  // Sets icon for result.
+  IconData _resultIcon(InspectionResult result) {
+    return switch (result) {
+      InspectionResult.pass => Icons.check_circle_outline,
+      InspectionResult.fail => Icons.cancel_outlined,
+      InspectionResult.na => Icons.help_outline,
+    };
+  }
+
+  // Sets label for result.
+  String _resultLabel(InspectionResult result) {
+    return switch (result) {
+      InspectionResult.pass => 'Pass',
+      InspectionResult.fail => 'Fail',
+      InspectionResult.na => 'N/A',
+    };
+  }
+
+  // ---------- Edit dialog ----------
+
   Future<void> _editItem(InspectionItem item) async {
     InspectionResult selected = item.result;
     final notesController = TextEditingController(text: item.notes);
@@ -55,15 +93,24 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             children: [
               DropdownButtonFormField<InspectionResult>(
                 value: selected,
+                decoration: const InputDecoration(labelText: 'Result'),
                 items: const [
-                  DropdownMenuItem(value: InspectionResult.pass, child: Text('Pass')),
-                  DropdownMenuItem(value: InspectionResult.fail, child: Text('Fail')),
-                  DropdownMenuItem(value: InspectionResult.na, child: Text('N/A')),
+                  DropdownMenuItem(
+                    value: InspectionResult.pass,
+                    child: Text('Pass'),
+                  ),
+                  DropdownMenuItem(
+                    value: InspectionResult.fail,
+                    child: Text('Fail'),
+                  ),
+                  DropdownMenuItem(
+                    value: InspectionResult.na,
+                    child: Text('N/A'),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) selected = v;
                 },
-                decoration: const InputDecoration(labelText: 'Result'),
               ),
               TextField(
                 controller: notesController,
@@ -98,21 +145,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     await _refresh();
   }
 
-  String _resultLabel(InspectionResult r) {
-    return switch (r) {
-      InspectionResult.pass => 'Pass',
-      InspectionResult.fail => 'Fail',
-      InspectionResult.na => 'N/A',
-    };
-  }
-
-  IconData _resultIcon(InspectionResult r) {
-    return switch (r) {
-      InspectionResult.pass => Icons.check_circle_outline,
-      InspectionResult.fail => Icons.cancel_outlined,
-      InspectionResult.na => Icons.help_outline,
-    };
-  }
+  // ---------- UI ----------
 
   @override
   Widget build(BuildContext context) {
@@ -125,11 +158,17 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.jobTitle, style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              widget.jobTitle,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 4),
             Text(widget.aircraftRef),
-            const SizedBox(height: 12),
-            const Text('Inspection items', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            const Text(
+              'Inspection items',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Expanded(
               child: FutureBuilder<List<InspectionItem>>(
@@ -138,6 +177,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
+
                   if (snapshot.hasError) {
                     return Center(child: Text('Error: ${snapshot.error}'));
                   }
@@ -154,11 +194,23 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final item = items[index];
+                        final color = _resultColor(item.result);
+
                         return Card(
+                          color: _cardTint(item.result),
                           child: ListTile(
+                            leading: Icon(
+                              _resultIcon(item.result),
+                              color: color,
+                            ),
                             title: Text(item.label),
-                            subtitle: Text(_resultLabel(item.result)),
-                            leading: Icon(_resultIcon(item.result)),
+                            subtitle: Text(
+                              _resultLabel(item.result),
+                              style: TextStyle(
+                                color: color,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             onTap: () => _editItem(item),
                           ),
                         );
