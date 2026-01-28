@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'dart:io' show Platform;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite/sqflite.dart';
 import 'data/local/local_store.dart';
 import 'models/job.dart';
 
