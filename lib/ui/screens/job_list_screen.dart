@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../data/local/local_store.dart';
 import '../../models/job.dart';
 import 'job_detail_screen.dart';
+import '../../data/remote/api_client.dart';
+import '../../sync/sync_engine.dart';
 
 class JobListScreen extends StatefulWidget {
   const JobListScreen({super.key, required this.store});
@@ -26,6 +28,39 @@ class _JobListScreenState extends State<JobListScreen> {
       _jobsFuture = widget.store.getJobs();
     });
   }
+
+  Future<void> _syncNow() async {
+  final api = WarehouseApiClient(
+    baseUrl: Theme.of(context).platform == TargetPlatform.android
+        ? 'http://10.0.2.2:5000'
+        : 'http://localhost:5000',
+  );
+
+  final engine = SyncEngine(
+    store: widget.store,
+    api: api,
+    username: 'student_user',
+    password: 'password123',
+  );
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Syncing…')),
+  );
+
+  try {
+    final result = await engine.syncNow();
+
+    await _refresh();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Sync failed: $e')),
+    );
+  }
+}
 
   Future<void> _showCreateJobDialog() async {
     final titleController = TextEditingController();
@@ -124,6 +159,13 @@ class _JobListScreenState extends State<JobListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('RampCheck — Jobs'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined),
+            tooltip: 'Sync now',
+            onPressed: _syncNow,
+          ),
+        ],
       ),
       body: FutureBuilder<List<Job>>(
         future: _jobsFuture,
