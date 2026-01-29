@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class WarehouseApiClient {
+import 'api_client_contract.dart';
+
+class WarehouseApiClient implements ApiClient {
   WarehouseApiClient({
     required this.baseUrl,
     http.Client? httpClient,

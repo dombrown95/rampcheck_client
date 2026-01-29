@@ -1,8 +1,8 @@
-import '../../data/local/local_store.dart';
 import '../../models/attachment.dart';
 import '../../models/inspection_item.dart';
 import '../../models/job.dart';
-import '../data/remote/api_client.dart';
+import '../data/remote/api_client_contract.dart';
+import '../data/local/local_store_contract.dart';
 
 class SyncEngine {
   SyncEngine({
@@ -13,8 +13,8 @@ class SyncEngine {
     this.role = 'manager',
   });
 
-  final LocalStore store;
-  final WarehouseApiClient api;
+  final LocalStoreContract store;
+  final ApiClient api;
 
   // Credentials for the user
   final String username;

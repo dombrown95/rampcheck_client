@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../models/job.dart';
 import '../../models/inspection_item.dart';
 import '../../models/attachment.dart';
+import 'local_store_contract.dart';
 
-class LocalStore {
+class LocalStore implements LocalStoreContract {
   LocalStore._(this._db);
 
   static const _dbName = 'rampcheck.db';
