@@ -1,14 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class WarehouseApi {
-  WarehouseApi({required this.baseUrl});
+class WarehouseApiClient {
+  WarehouseApiClient({
+    required this.baseUrl,
+    http.Client? httpClient,
+  }) : _http = httpClient ?? http.Client();
 
   final String baseUrl;
+  final http.Client _http;
 
   static const apiKey = 'api_warehouse_student_key_1234567890abcdef';
 
-  Map<String, String> _jsonHeaders() => {
+  Map<String, String> _jsonHeaders() => const {
         'Content-Type': 'application/json',
       };
 
@@ -22,31 +26,39 @@ class WarehouseApi {
     required String password,
     required String role,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/users'),
-      headers: _jsonHeaders(),
-      body: jsonEncode({
-        'username': username,
-        'password': password,
-        'role': role,
-      }),
-    );
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    final res = await _http
+        .post(
+          Uri.parse('$baseUrl/api/v1/users'),
+          headers: _jsonHeaders(),
+          body: jsonEncode({
+            'username': username,
+            'password': password,
+            'role': role,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _throwIfBad(res, context: 'createUser');
+    return _decodeMap(res.body);
   }
 
   Future<Map<String, dynamic>> login({
     required String username,
     required String password,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/users/login'),
-      headers: _jsonHeaders(),
-      body: jsonEncode({
-        'username': username,
-        'password': password,
-      }),
-    );
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    final res = await _http
+        .post(
+          Uri.parse('$baseUrl/api/v1/users/login'),
+          headers: _jsonHeaders(),
+          body: jsonEncode({
+            'username': username,
+            'password': password,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _throwIfBad(res, context: 'login');
+    return _decodeMap(res.body);
   }
 
   Future<Map<String, dynamic>> createLog({
@@ -56,17 +68,44 @@ class WarehouseApi {
     required String status,
     required int userId,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/logs'),
-      headers: _authHeaders(),
-      body: jsonEncode({
-        'title': title,
-        'description': description,
-        'priority': priority,
-        'status': status,
-        'user_id': userId,
-      }),
-    );
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    final res = await _http
+        .post(
+          Uri.parse('$baseUrl/api/v1/logs'),
+          headers: _authHeaders(),
+          body: jsonEncode({
+            'title': title,
+            'description': description,
+            'priority': priority,
+            'status': status,
+            'user_id': userId,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    _throwIfBad(res, context: 'createLog');
+    return _decodeMap(res.body);
   }
+
+  Map<String, dynamic> _decodeMap(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    throw ApiException('Expected JSON object, got: $decoded');
+  }
+
+  void _throwIfBad(http.Response res, {required String context}) {
+    if (res.statusCode >= 200 && res.statusCode < 300) return;
+    throw ApiException(
+      'API error in $context: HTTP ${res.statusCode} - ${res.body}',
+    );
+  }
+
+  void dispose() => _http.close();
+}
+
+class ApiException implements Exception {
+  ApiException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
