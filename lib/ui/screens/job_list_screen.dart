@@ -30,10 +30,10 @@ class _JobListScreenState extends State<JobListScreen> {
   }
 
   Future<void> _syncNow() async {
+  final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+
   final api = WarehouseApiClient(
-    baseUrl: Theme.of(context).platform == TargetPlatform.android
-        ? 'http://10.0.2.2:5000'
-        : 'http://localhost:5000',
+    baseUrl: isAndroid ? 'http://10.0.2.2:5000' : 'http://localhost:5000',
   );
 
   final engine = SyncEngine(
@@ -43,20 +43,28 @@ class _JobListScreenState extends State<JobListScreen> {
     password: 'password123',
   );
 
-  ScaffoldMessenger.of(context).showSnackBar(
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
     const SnackBar(content: Text('Syncing…')),
   );
 
   try {
     final result = await engine.syncNow();
+    if (!mounted) return;
 
     await _refresh();
+    if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(content: Text(result.message)),
     );
   } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    if (!mounted) return;
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(content: Text('Sync failed: $e')),
     );
   }

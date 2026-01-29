@@ -44,6 +44,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() {
       _itemsFuture = _loadItems();
       _attachmentsFuture = _loadAttachments();
@@ -53,8 +54,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   // Sets card tint to green for pass, red for fail, none for N/A.
   Color? _cardTint(InspectionResult result) {
     return switch (result) {
-      InspectionResult.pass => Colors.green.withOpacity(0.20),
-      InspectionResult.fail => Colors.red.withOpacity(0.20),
+      InspectionResult.pass => Colors.green.withValues(alpha: 20),
+      InspectionResult.fail => Colors.red.withValues(alpha: 20),
       InspectionResult.na => null,
     };
   }
@@ -94,14 +95,14 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: Text(item.label),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<InspectionResult>(
-                value: selected,
+                initialValue: selected,
                 decoration: const InputDecoration(labelText: 'Result'),
                 items: const [
                   DropdownMenuItem(
@@ -130,11 +131,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Save'),
             ),
           ],
@@ -142,6 +143,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       },
     );
 
+    if (!mounted) return;
     if (saved != true) return;
 
     final updated = item.copyWith(
@@ -161,6 +163,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       allowMultiple: false,
       withData: false,
     );
+
+    if (!mounted) return;
 
     if (result == null || result.files.isEmpty) return;
 
@@ -205,22 +209,23 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   Future<void> _deleteAttachment(Attachment a) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Remove attachment?'),
         content: Text('Remove "${a.fileName}" from this job?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Remove'),
           ),
         ],
       ),
     );
 
+    if (!mounted) return;
     if (confirmed != true) return;
 
     await widget.store.deleteAttachment(a.id);
