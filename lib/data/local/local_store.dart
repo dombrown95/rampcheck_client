@@ -2,19 +2,22 @@ import 'dart:async';
 
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../models/job.dart';
 import '../../models/inspection_item.dart';
+import '../../models/attachment.dart';
 
 class LocalStore {
   LocalStore._(this._db);
 
   static const _dbName = 'rampcheck.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 3;
 
   static const jobsTable = 'jobs';
   static const inspectionItemsTable = 'inspection_items';
+  static const attachmentsTable = 'attachments';
 
   final Database _db;
 
@@ -62,6 +65,23 @@ class LocalStore {
         await db.execute(
           'CREATE INDEX idx_items_jobId_updatedAt ON $inspectionItemsTable(jobId, updatedAt);',
         );
+
+        // Attachments table (v3)
+        await db.execute('''
+          CREATE TABLE $attachmentsTable (
+            id TEXT PRIMARY KEY,
+            jobId TEXT NOT NULL,
+            localPath TEXT NOT NULL,
+            fileName TEXT NOT NULL,
+            mimeType TEXT NOT NULL,
+            uploaded INTEGER NOT NULL,
+            updatedAt TEXT NOT NULL
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_attachments_jobId_updatedAt ON $attachmentsTable(jobId, updatedAt);',
+        );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -78,6 +98,24 @@ class LocalStore {
 
           await db.execute(
             'CREATE INDEX idx_items_jobId_updatedAt ON $inspectionItemsTable(jobId, updatedAt);',
+          );
+        }
+
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE $attachmentsTable (
+              id TEXT PRIMARY KEY,
+              jobId TEXT NOT NULL,
+              localPath TEXT NOT NULL,
+              fileName TEXT NOT NULL,
+              mimeType TEXT NOT NULL,
+              uploaded INTEGER NOT NULL,
+              updatedAt TEXT NOT NULL
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX idx_attachments_jobId_updatedAt ON $attachmentsTable(jobId, updatedAt);',
           );
         }
       },
@@ -110,6 +148,19 @@ class LocalStore {
       where: 'id = ?',
       whereArgs: [id],
     );
+
+    // Optional cleanup: also remove child rows
+    await _db.delete(
+      inspectionItemsTable,
+      where: 'jobId = ?',
+      whereArgs: [id],
+    );
+
+    await _db.delete(
+      attachmentsTable,
+      where: 'jobId = ?',
+      whereArgs: [id],
+    );
   }
 
   // ---------- INSPECTION ITEMS ----------
@@ -140,7 +191,7 @@ class LocalStore {
     );
   }
 
-  /// Checks a default checklist if none exists.
+  /// Uses a default checklist if none exists (for idempotency).
   Future<void> ensureDefaultChecklist(String jobId) async {
     final existing = await _db.query(
       inspectionItemsTable,
@@ -172,7 +223,35 @@ class LocalStore {
     }
   }
 
-  // ---------- DEBUG / CLEANUP ----------
+  // ---------- ATTACHMENTS ----------
+
+  Future<List<Attachment>> getAttachmentsForJob(String jobId) async {
+    final rows = await _db.query(
+      attachmentsTable,
+      where: 'jobId = ?',
+      whereArgs: [jobId],
+      orderBy: 'updatedAt DESC',
+    );
+    return rows.map((r) => Attachment.fromJson(r)).toList();
+  }
+
+  Future<void> upsertAttachment(Attachment attachment) async {
+    await _db.insert(
+      attachmentsTable,
+      attachment.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteAttachment(String id) async {
+    await _db.delete(
+      attachmentsTable,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ---------- CLEANUP ----------
 
   Future<void> close() async {
     await _db.close();
