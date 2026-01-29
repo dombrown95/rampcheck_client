@@ -24,51 +24,52 @@ class _JobListScreenState extends State<JobListScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() {
       _jobsFuture = widget.store.getJobs();
     });
   }
 
   Future<void> _syncNow() async {
-  final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
 
-  final api = WarehouseApiClient(
-    baseUrl: isAndroid ? 'http://10.0.2.2:5000' : 'http://localhost:5000',
-  );
+    final api = WarehouseApiClient(
+      baseUrl: isAndroid ? 'http://10.0.2.2:5000' : 'http://localhost:5000',
+    );
 
-  final engine = SyncEngine(
-    store: widget.store,
-    api: api,
-    username: 'student_user',
-    password: 'password123',
-  );
+    final engine = SyncEngine(
+      store: widget.store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
 
-  final messenger = ScaffoldMessenger.of(context);
-  messenger.hideCurrentSnackBar();
-  messenger.showSnackBar(
-    const SnackBar(content: Text('Syncing…')),
-  );
-
-  try {
-    final result = await engine.syncNow();
-    if (!mounted) return;
-
-    await _refresh();
-    if (!mounted) return;
-
+    final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
-      SnackBar(content: Text(result.message)),
+      const SnackBar(content: Text('Syncing…')),
     );
-  } catch (e) {
-    if (!mounted) return;
 
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text('Sync failed: $e')),
-    );
+    try {
+      final result = await engine.syncNow();
+      if (!mounted) return;
+
+      await _refresh();
+      if (!mounted) return;
+
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Sync failed: $e')),
+      );
+    }
   }
-}
 
   Future<void> _showCreateJobDialog() async {
     final titleController = TextEditingController();
@@ -76,7 +77,7 @@ class _JobListScreenState extends State<JobListScreen> {
 
     final created = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Create job'),
           content: Column(
@@ -96,7 +97,7 @@ class _JobListScreenState extends State<JobListScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -104,7 +105,7 @@ class _JobListScreenState extends State<JobListScreen> {
                 final title = titleController.text.trim();
                 final aircraftRef = aircraftController.text.trim();
                 if (title.isEmpty || aircraftRef.isEmpty) return;
-                Navigator.pop(context, true);
+                Navigator.pop(dialogContext, true);
               },
               child: const Text('Save'),
             ),
@@ -113,6 +114,7 @@ class _JobListScreenState extends State<JobListScreen> {
       },
     );
 
+    if (!mounted) return;
     if (created != true) return;
 
     final now = DateTime.now();
@@ -132,33 +134,65 @@ class _JobListScreenState extends State<JobListScreen> {
   Future<void> _deleteJob(Job job) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete job?'),
         content: Text('Delete "${job.title}"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
 
+    if (!mounted) return;
     if (confirmed != true) return;
 
     await widget.store.deleteJob(job.id);
     await _refresh();
   }
 
+  // Returns a label representing the job status.
   String _statusLabel(JobStatus status) {
     return switch (status) {
       JobStatus.open => 'Open',
       JobStatus.inProgress => 'In progress',
       JobStatus.closed => 'Closed',
+    };
+  }
+
+  // Returns a label representing the sync status.
+  String _syncLabel(SyncStatus status) {
+    return switch (status) {
+      SyncStatus.pending => 'Pending sync',
+      SyncStatus.syncing => 'Syncing…',
+      SyncStatus.clean => 'Synced',
+      SyncStatus.failed => 'Sync failed',
+    };
+  }
+
+  // Returns a color representing the sync status.
+  Color _syncColor(SyncStatus status) {
+    return switch (status) {
+      SyncStatus.pending => Colors.orange,
+      SyncStatus.syncing => Colors.blue,
+      SyncStatus.clean => Colors.green,
+      SyncStatus.failed => Colors.red,
+    };
+  }
+
+  // Returns an icon representing the sync status.
+  IconData _syncIcon(SyncStatus status) {
+    return switch (status) {
+      SyncStatus.pending => Icons.schedule_outlined,
+      SyncStatus.syncing => Icons.sync,
+      SyncStatus.clean => Icons.check_circle_outline,
+      SyncStatus.failed => Icons.error_outline,
     };
   }
 
@@ -198,11 +232,33 @@ class _JobListScreenState extends State<JobListScreen> {
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final job = jobs[index];
+                final syncColor = _syncColor(job.syncStatus);
 
                 return Card(
                   child: ListTile(
                     title: Text(job.title),
-                    subtitle: Text('${job.aircraftRef} • ${_statusLabel(job.status)}'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${job.aircraftRef} • ${_statusLabel(job.status)}'),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_syncIcon(job.syncStatus), size: 16, color: syncColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              _syncLabel(job.syncStatus),
+                              style: TextStyle(
+                                color: syncColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
