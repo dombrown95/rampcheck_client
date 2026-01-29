@@ -23,6 +23,7 @@ class WarehouseApiClient implements ApiClient {
         'X-API-Key': apiKey,
       };
 
+  @override
   Future<Map<String, dynamic>> createUser({
     required String username,
     required String password,
@@ -44,6 +45,7 @@ class WarehouseApiClient implements ApiClient {
     return _decodeMap(res.body);
   }
 
+  @override
   Future<Map<String, dynamic>> login({
     required String username,
     required String password,
@@ -63,6 +65,7 @@ class WarehouseApiClient implements ApiClient {
     return _decodeMap(res.body);
   }
 
+  @override
   Future<Map<String, dynamic>> createLog({
     required String title,
     required String description,

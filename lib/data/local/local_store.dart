@@ -126,6 +126,7 @@ class LocalStore implements LocalStoreContract {
 
   // ---------- JOBS ----------
 
+  @override
   Future<List<Job>> getJobs() async {
     final rows = await _db.query(
       jobsTable,
@@ -134,6 +135,7 @@ class LocalStore implements LocalStoreContract {
     return rows.map((r) => Job.fromJson(r)).toList();
   }
 
+  @override
   Future<void> upsertJob(Job job) async {
     await _db.insert(
       jobsTable,
@@ -165,6 +167,7 @@ class LocalStore implements LocalStoreContract {
 
   // ---------- INSPECTION ITEMS ----------
 
+  @override
   Future<List<InspectionItem>> getInspectionItemsForJob(String jobId) async {
     final rows = await _db.query(
       inspectionItemsTable,
@@ -225,6 +228,7 @@ class LocalStore implements LocalStoreContract {
 
   // ---------- ATTACHMENTS ----------
 
+  @override
   Future<List<Attachment>> getAttachmentsForJob(String jobId) async {
     final rows = await _db.query(
       attachmentsTable,
