@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../data/local/local_store.dart';
+import '../../data/remote/api_client.dart';
 import '../../models/job.dart';
 import '../../models/session.dart';
-import 'job_detail_screen.dart';
-import '../../data/remote/api_client.dart';
 import '../../sync/sync_engine.dart';
+import 'job_detail_screen.dart';
 
 class JobListScreen extends StatefulWidget {
   const JobListScreen({
@@ -60,9 +60,7 @@ class _JobListScreenState extends State<JobListScreen> {
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Syncing…')),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Syncing…')));
 
     try {
       // Marks all pending jobs as "syncing" while the sync runs.
@@ -75,16 +73,12 @@ class _JobListScreenState extends State<JobListScreen> {
       if (!mounted) return;
 
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text(result.message)),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(result.message)));
     } catch (e) {
       if (!mounted) return;
 
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text('Sync failed: $e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Sync failed: $e')));
     } finally {
       // Refreshes to reflect final states (synced/failed)
       await _refresh();
@@ -220,10 +214,32 @@ class _JobListScreenState extends State<JobListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.blue,
+        backgroundColor: Colors.blue.shade600,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('RampCheck — Jobs'),
+        title: Row(
+          children: [
+            ClipOval(
+              child: Container(
+                width: 36,
+                height: 36,
+                color: Colors.white,
+                padding: const EdgeInsets.all(4),
+                child: Image.asset(
+                  'assets/images/rampcheck_logo.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) =>
+                      const Icon(Icons.flight_takeoff, size: 20),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'RampCheck — Jobs',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.cloud_upload_outlined),
@@ -271,7 +287,6 @@ class _JobListScreenState extends State<JobListScreen> {
                         Text('${job.aircraftRef} • ${_statusLabel(job.status)}'),
                         const SizedBox(height: 6),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(_syncIcon(job.syncStatus), size: 16, color: syncColor),
                             const SizedBox(width: 6),
@@ -301,8 +316,8 @@ class _JobListScreenState extends State<JobListScreen> {
                     },
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _deleteJob(job),
                       tooltip: 'Delete',
+                      onPressed: () => _deleteJob(job),
                     ),
                   ),
                 );
