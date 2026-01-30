@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../../data/local/local_store.dart';
 import '../../models/job.dart';
+import '../../models/session.dart';
 import 'job_detail_screen.dart';
 import '../../data/remote/api_client.dart';
 import '../../sync/sync_engine.dart';
 
 class JobListScreen extends StatefulWidget {
-  const JobListScreen({super.key, required this.store});
+  const JobListScreen({
+    super.key,
+    required this.store,
+    required this.session,
+  });
+
   final LocalStore store;
+  final Session session;
 
   @override
   State<JobListScreen> createState() => _JobListScreenState();
@@ -30,6 +37,12 @@ class _JobListScreenState extends State<JobListScreen> {
     });
   }
 
+  Future<void> _logout() async {
+    await widget.store.clearSession();
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   Future<void> _syncNow() async {
     final isAndroid = Theme.of(context).platform == TargetPlatform.android;
 
@@ -40,8 +53,9 @@ class _JobListScreenState extends State<JobListScreen> {
     final engine = SyncEngine(
       store: widget.store,
       api: api,
-      username: 'student_user',
-      password: 'password123',
+      username: widget.session.username,
+      password: widget.session.password,
+      role: widget.session.role,
     );
 
     final messenger = ScaffoldMessenger.of(context);
@@ -51,6 +65,9 @@ class _JobListScreenState extends State<JobListScreen> {
     );
 
     try {
+      // Optional UX: mark all pending jobs as "syncing" while the sync runs
+      await widget.store.markAllPendingJobsSyncing();
+
       final result = await engine.syncNow();
       if (!mounted) return;
 
@@ -68,6 +85,9 @@ class _JobListScreenState extends State<JobListScreen> {
       messenger.showSnackBar(
         SnackBar(content: Text('Sync failed: $e')),
       );
+    } finally {
+      // Refresh again to reflect final states (clean/failed) if needed
+      await _refresh();
     }
   }
 
@@ -206,6 +226,11 @@ class _JobListScreenState extends State<JobListScreen> {
             icon: const Icon(Icons.cloud_upload_outlined),
             tooltip: 'Sync now',
             onPressed: _syncNow,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _logout,
           ),
         ],
       ),

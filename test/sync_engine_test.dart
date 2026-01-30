@@ -3,6 +3,7 @@ import 'package:rampcheck_client/sync/sync_engine.dart';
 import 'package:rampcheck_client/models/job.dart';
 import 'package:rampcheck_client/models/inspection_item.dart';
 import 'package:rampcheck_client/models/attachment.dart';
+import 'package:rampcheck_client/models/session.dart';
 import 'package:rampcheck_client/data/local/local_store_contract.dart';
 import 'package:rampcheck_client/data/remote/api_client_contract.dart';
 
@@ -21,13 +22,14 @@ class FakeStore implements LocalStoreContract {
 
   final List<Job> upsertedJobs = [];
 
+  Session? _session;
+
   @override
   Future<List<Job>> getJobs() async => List<Job>.from(_jobs);
 
   @override
   Future<void> upsertJob(Job job) async {
     upsertedJobs.add(job);
-
     final idx = _jobs.indexWhere((j) => j.id == job.id);
     if (idx >= 0) {
       _jobs[idx] = job;
@@ -37,17 +39,83 @@ class FakeStore implements LocalStoreContract {
   }
 
   @override
+  Future<void> deleteJob(String id) async {
+    _jobs.removeWhere((j) => j.id == id);
+    _itemsByJob.remove(id);
+    _attachmentsByJob.remove(id);
+  }
+
+  @override
   Future<List<InspectionItem>> getInspectionItemsForJob(String jobId) async =>
       List<InspectionItem>.from(_itemsByJob[jobId] ?? const []);
 
   @override
+  Future<void> upsertInspectionItem(InspectionItem item) async {
+    final list = _itemsByJob[item.jobId] ?? <InspectionItem>[];
+    final idx = list.indexWhere((i) => i.id == item.id);
+    if (idx >= 0) {
+      list[idx] = item;
+    } else {
+      list.add(item);
+    }
+    _itemsByJob[item.jobId] = list;
+  }
+
+  @override
+  Future<void> deleteInspectionItem(String id) async {
+    for (final key in _itemsByJob.keys) {
+      _itemsByJob[key] = (_itemsByJob[key] ?? []).where((i) => i.id != id).toList();
+    }
+  }
+
+  @override
+  Future<void> ensureDefaultChecklist(String jobId) async {
+  }
+
+  @override
   Future<List<Attachment>> getAttachmentsForJob(String jobId) async =>
       List<Attachment>.from(_attachmentsByJob[jobId] ?? const []);
+
+  @override
+  Future<void> upsertAttachment(Attachment attachment) async {
+    final list = _attachmentsByJob[attachment.jobId] ?? <Attachment>[];
+    final idx = list.indexWhere((a) => a.id == attachment.id);
+    if (idx >= 0) {
+      list[idx] = attachment;
+    } else {
+      list.add(attachment);
+    }
+    _attachmentsByJob[attachment.jobId] = list;
+  }
+
+  @override
+  Future<void> deleteAttachment(String id) async {
+    for (final key in _attachmentsByJob.keys) {
+      _attachmentsByJob[key] =
+          (_attachmentsByJob[key] ?? []).where((a) => a.id != id).toList();
+    }
+  }
+
+  @override
+  Future<void> saveSession(Session session) async {
+    _session = session;
+  }
+
+  @override
+  Future<Session?> getSession() async => _session;
+
+  @override
+  Future<void> clearSession() async {
+    _session = null;
+  }
+
+  @override
+  Future<void> close() async {
+  }
 }
 
 class FakeApi implements ApiClient {
   FakeApi({this.failCreateLog = false});
-
   final bool failCreateLog;
 
   int createLogCalls = 0;
@@ -58,7 +126,6 @@ class FakeApi implements ApiClient {
     required String password,
     required String role,
   }) async {
-    // Pretend user already exists -> throw so SyncEngine falls back to login
     throw Exception('User exists');
   }
 
@@ -79,11 +146,7 @@ class FakeApi implements ApiClient {
     required int userId,
   }) async {
     createLogCalls++;
-
-    if (failCreateLog) {
-      throw Exception('API down');
-    }
-
+    if (failCreateLog) throw Exception('API down');
     return {'id': 999};
   }
 }

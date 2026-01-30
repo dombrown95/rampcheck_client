@@ -7,21 +7,21 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../models/job.dart';
 import '../../models/inspection_item.dart';
 import '../../models/attachment.dart';
+import '../../models/session.dart';
 import 'local_store_contract.dart';
 
 class LocalStore implements LocalStoreContract {
   LocalStore._(this._db);
 
   static const _dbName = 'rampcheck.db';
-  static const _dbVersion = 3;
+  static const _dbVersion = 4;
 
   static const jobsTable = 'jobs';
   static const inspectionItemsTable = 'inspection_items';
   static const attachmentsTable = 'attachments';
+  static const sessionTable = 'session';
 
   final Database _db;
-
-  // ---------- OPEN ----------
 
   static Future<LocalStore> open() async {
     sqfliteFfiInit();
@@ -45,10 +45,7 @@ class LocalStore implements LocalStoreContract {
             syncStatus TEXT NOT NULL
           );
         ''');
-
-        await db.execute(
-          'CREATE INDEX idx_jobs_updatedAt ON $jobsTable(updatedAt);',
-        );
+        await db.execute('CREATE INDEX idx_jobs_updatedAt ON $jobsTable(updatedAt);');
 
         // Inspection items table
         await db.execute('''
@@ -61,12 +58,11 @@ class LocalStore implements LocalStoreContract {
             updatedAt TEXT NOT NULL
           );
         ''');
-
         await db.execute(
           'CREATE INDEX idx_items_jobId_updatedAt ON $inspectionItemsTable(jobId, updatedAt);',
         );
 
-        // Attachments table (v3)
+        // Attachments table
         await db.execute('''
           CREATE TABLE $attachmentsTable (
             id TEXT PRIMARY KEY,
@@ -78,10 +74,20 @@ class LocalStore implements LocalStoreContract {
             updatedAt TEXT NOT NULL
           );
         ''');
-
         await db.execute(
           'CREATE INDEX idx_attachments_jobId_updatedAt ON $attachmentsTable(jobId, updatedAt);',
         );
+
+        // Session table
+        await db.execute('''
+          CREATE TABLE $sessionTable (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            username TEXT NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL,
+            updatedAt TEXT NOT NULL
+          );
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -95,7 +101,6 @@ class LocalStore implements LocalStoreContract {
               updatedAt TEXT NOT NULL
             );
           ''');
-
           await db.execute(
             'CREATE INDEX idx_items_jobId_updatedAt ON $inspectionItemsTable(jobId, updatedAt);',
           );
@@ -113,10 +118,21 @@ class LocalStore implements LocalStoreContract {
               updatedAt TEXT NOT NULL
             );
           ''');
-
           await db.execute(
             'CREATE INDEX idx_attachments_jobId_updatedAt ON $attachmentsTable(jobId, updatedAt);',
           );
+        }
+
+        if (oldVersion < 4) {
+          await db.execute('''
+            CREATE TABLE $sessionTable (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              username TEXT NOT NULL,
+              password TEXT NOT NULL,
+              role TEXT NOT NULL,
+              updatedAt TEXT NOT NULL
+            );
+          ''');
         }
       },
     );
@@ -128,10 +144,7 @@ class LocalStore implements LocalStoreContract {
 
   @override
   Future<List<Job>> getJobs() async {
-    final rows = await _db.query(
-      jobsTable,
-      orderBy: 'updatedAt DESC',
-    );
+    final rows = await _db.query(jobsTable, orderBy: 'updatedAt DESC');
     return rows.map((r) => Job.fromJson(r)).toList();
   }
 
@@ -144,25 +157,36 @@ class LocalStore implements LocalStoreContract {
     );
   }
 
+  @override
   Future<void> deleteJob(String id) async {
-    await _db.delete(
+    await _db.delete(jobsTable, where: 'id = ?', whereArgs: [id]);
+
+    await _db.delete(inspectionItemsTable, where: 'jobId = ?', whereArgs: [id]);
+    await _db.delete(attachmentsTable, where: 'jobId = ?', whereArgs: [id]);
+  }
+
+  Future<void> markAllPendingJobsSyncing() async {
+    final rows = await _db.query(
       jobsTable,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'syncStatus = ?',
+      whereArgs: [SyncStatus.pending.name],
     );
+    if (rows.isEmpty) return;
 
-    // Optional cleanup: also remove child rows
-    await _db.delete(
-      inspectionItemsTable,
-      where: 'jobId = ?',
-      whereArgs: [id],
-    );
+    final now = DateTime.now().toIso8601String();
 
-    await _db.delete(
-      attachmentsTable,
-      where: 'jobId = ?',
-      whereArgs: [id],
-    );
+    final batch = _db.batch();
+    for (final r in rows) {
+      final id = r['id'] as String?;
+      if (id == null) continue;
+      batch.update(
+        jobsTable,
+        {'syncStatus': SyncStatus.syncing.name, 'updatedAt': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   // ---------- INSPECTION ITEMS ----------
@@ -178,6 +202,7 @@ class LocalStore implements LocalStoreContract {
     return rows.map((r) => InspectionItem.fromJson(r)).toList();
   }
 
+  @override
   Future<void> upsertInspectionItem(InspectionItem item) async {
     await _db.insert(
       inspectionItemsTable,
@@ -186,15 +211,12 @@ class LocalStore implements LocalStoreContract {
     );
   }
 
+  @override
   Future<void> deleteInspectionItem(String id) async {
-    await _db.delete(
-      inspectionItemsTable,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await _db.delete(inspectionItemsTable, where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Uses a default checklist if none exists (for idempotency).
+  @override
   Future<void> ensureDefaultChecklist(String jobId) async {
     final existing = await _db.query(
       inspectionItemsTable,
@@ -239,6 +261,7 @@ class LocalStore implements LocalStoreContract {
     return rows.map((r) => Attachment.fromJson(r)).toList();
   }
 
+  @override
   Future<void> upsertAttachment(Attachment attachment) async {
     await _db.insert(
       attachmentsTable,
@@ -247,16 +270,55 @@ class LocalStore implements LocalStoreContract {
     );
   }
 
+  @override
   Future<void> deleteAttachment(String id) async {
-    await _db.delete(
-      attachmentsTable,
-      where: 'id = ?',
-      whereArgs: [id],
+    await _db.delete(attachmentsTable, where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------- SESSION ----------
+
+  @override
+  Future<void> saveSession(Session session) async {
+    await _db.insert(
+      sessionTable,
+      {
+        'id': 1,
+        'username': session.username,
+        'password': session.password,
+        'role': session.role,
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  @override
+  Future<Session?> getSession() async {
+    final rows = await _db.query(
+      sessionTable,
+      where: 'id = ?',
+      whereArgs: [1],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) return null;
+    final r = rows.single;
+
+    return Session(
+      username: (r['username'] as String?) ?? '',
+      password: (r['password'] as String?) ?? '',
+      role: (r['role'] as String?) ?? 'manager',
+    );
+  }
+
+  @override
+  Future<void> clearSession() async {
+    await _db.delete(sessionTable, where: 'id = ?', whereArgs: [1]);
   }
 
   // ---------- CLEANUP ----------
 
+  @override
   Future<void> close() async {
     await _db.close();
   }
