@@ -115,10 +115,28 @@ class FakeStore implements LocalStoreContract {
 }
 
 class FakeApi implements ApiClient {
-  FakeApi({this.failCreateLog = false});
+  FakeApi({
+    this.failCreateLog = false,
+    this.failOnCreateLogCall,
+    this.createUserReturnsId,
+    this.loginReturnsId = 123,
+  });
+
   final bool failCreateLog;
 
+  final int? failOnCreateLogCall;
+
+  final int? createUserReturnsId;
+
+  final int loginReturnsId;
+
   int createLogCalls = 0;
+  int createUserCalls = 0;
+  int loginCalls = 0;
+
+  final List<String> createLogStatuses = [];
+  final List<String> createLogDescriptions = [];
+  final List<int> createLogUserIds = [];
 
   @override
   Future<Map<String, dynamic>> createUser({
@@ -126,6 +144,10 @@ class FakeApi implements ApiClient {
     required String password,
     required String role,
   }) async {
+    createUserCalls++;
+    if (createUserReturnsId != null) {
+      return {'id': createUserReturnsId};
+    }
     throw Exception('User exists');
   }
 
@@ -134,7 +156,8 @@ class FakeApi implements ApiClient {
     required String username,
     required String password,
   }) async {
-    return {'id': 123};
+    loginCalls++;
+    return {'id': loginReturnsId};
   }
 
   @override
@@ -146,12 +169,21 @@ class FakeApi implements ApiClient {
     required int userId,
   }) async {
     createLogCalls++;
+    createLogStatuses.add(status);
+    createLogDescriptions.add(description);
+    createLogUserIds.add(userId);
+
+    if (failOnCreateLogCall != null && createLogCalls == failOnCreateLogCall) {
+      throw Exception('API down');
+    }
     if (failCreateLog) throw Exception('API down');
+
     return {'id': 999};
   }
 }
 
 void main() {
+  // Tests that when the API succeeds, the job is marked as clean.
   test('syncNow marks pending jobs as clean when API succeeds', () async {
     final job = Job(
       id: 'job-1',
@@ -182,6 +214,7 @@ void main() {
     expect(updated.syncStatus, SyncStatus.clean);
   });
 
+  // Tests that when the API fails, the job is marked as failed.
   test('syncNow marks pending jobs as failed when API fails', () async {
     final job = Job(
       id: 'job-2',
@@ -211,5 +244,347 @@ void main() {
 
     final updated = (await store.getJobs()).first;
     expect(updated.syncStatus, SyncStatus.failed);
+  });
+
+  // Tests that when there are no pending jobs, syncNow returns early.
+  test('syncNow returns "No pending jobs" and makes no API calls when nothing to sync', () async {
+    final job = Job(
+      id: 'job-clean',
+      title: 'Already Synced',
+      aircraftRef: 'BAE3',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.clean,
+    );
+
+    final store = FakeStore(jobs: [job]);
+    final api = FakeApi();
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    final summary = await engine.syncNow();
+
+    expect(summary.synced, 0);
+    expect(summary.failed, 0);
+    expect(summary.message, 'No pending jobs to sync.');
+    expect(api.createLogCalls, 0);
+    expect(api.loginCalls, 0);
+    expect(api.createUserCalls, 0);
+  });
+
+  // Tests that jobs with syncStatus=syncing are also included in the sync set.
+  test('syncNow includes jobs with syncStatus=syncing in the sync set', () async {
+    final job = Job(
+      id: 'job-syncing',
+      title: 'Syncing Job',
+      aircraftRef: 'BAE4',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.syncing,
+    );
+
+    final store = FakeStore(jobs: [job]);
+    final api = FakeApi();
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    final summary = await engine.syncNow();
+
+    expect(summary.synced, 1);
+    expect(summary.failed, 0);
+    expect(api.createLogCalls, 1);
+
+    final updated = (await store.getJobs()).first;
+    expect(updated.syncStatus, SyncStatus.clean);
+  });
+
+  // Tests that an intermediate "syncing" state is upserted before marking clean.
+  test('syncNow upserts an intermediate syncing state before marking clean', () async {
+    final job = Job(
+      id: 'job-intermediate',
+      title: 'Intermediate Job',
+      aircraftRef: 'BAE5',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final store = FakeStore(jobs: [job]);
+    final api = FakeApi();
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    await engine.syncNow();
+
+    final hasSyncingUpsert = store.upsertedJobs.any(
+      (j) => j.id == job.id && j.syncStatus == SyncStatus.syncing,
+    );
+    final hasCleanUpsert = store.upsertedJobs.any(
+      (j) => j.id == job.id && j.syncStatus == SyncStatus.clean,
+    );
+
+    expect(hasSyncingUpsert, true);
+    expect(hasCleanUpsert, true);
+  });
+
+  // Tests a scenario with multiple jobs where some succeed and some fail.
+  test('syncNow handles multiple jobs and reports partial failures', () async {
+    final job1 = Job(
+      id: 'job-a',
+      title: 'Job A',
+      aircraftRef: 'BAE6',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final job2 = Job(
+      id: 'job-b',
+      title: 'Job B',
+      aircraftRef: 'BAE7',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final store = FakeStore(jobs: [job1, job2]);
+
+    // Fails only on the second createLog call.
+    final api = FakeApi(failOnCreateLogCall: 2);
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    final summary = await engine.syncNow();
+
+    expect(api.createLogCalls, 2);
+    expect(summary.synced, 1);
+    expect(summary.failed, 1);
+    expect(summary.errors.length, 1);
+
+    final jobs = await store.getJobs();
+    final a = jobs.firstWhere((j) => j.id == 'job-a');
+    final b = jobs.firstWhere((j) => j.id == 'job-b');
+
+    expect(a.syncStatus, SyncStatus.clean);
+    expect(b.syncStatus, SyncStatus.failed);
+  });
+
+  // Tests that syncNow maps JobStatus.completed to API status "closed".
+  test('syncNow maps JobStatus.completed to API status "closed"', () async {
+    final job = Job(
+      id: 'job-completed',
+      title: 'Completed Job',
+      aircraftRef: 'BAE8',
+      status: JobStatus.completed,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final store = FakeStore(jobs: [job]);
+    final api = FakeApi();
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    await engine.syncNow();
+
+    expect(api.createLogCalls, 1);
+    expect(api.createLogStatuses.single, 'closed');
+  });
+
+  // Tests that syncNow maps Open/In Progress/On Hold to API status "open".
+  test('syncNow maps open/inProgress/onHold to API status "open"', () async {
+    final jobs = <Job>[
+      Job(
+        id: 'job-open',
+        title: 'Open Job',
+        aircraftRef: 'BAE9',
+        status: JobStatus.open,
+        updatedAt: DateTime(2026, 1, 1),
+        syncStatus: SyncStatus.pending,
+      ),
+      Job(
+        id: 'job-inprog',
+        title: 'In Progress Job',
+        aircraftRef: 'BAE10',
+        status: JobStatus.inProgress,
+        updatedAt: DateTime(2026, 1, 1),
+        syncStatus: SyncStatus.pending,
+      ),
+      Job(
+        id: 'job-hold',
+        title: 'On Hold Job',
+        aircraftRef: 'BAE11',
+        status: JobStatus.onHold,
+        updatedAt: DateTime(2026, 1, 1),
+        syncStatus: SyncStatus.pending,
+      ),
+    ];
+
+    final store = FakeStore(jobs: jobs);
+    final api = FakeApi();
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    await engine.syncNow();
+
+    expect(api.createLogCalls, 3);
+    expect(api.createLogStatuses, ['open', 'open', 'open']);
+  });
+
+  // Tests that inspection items and attachments are included in the log description.
+  test('syncNow includes inspection items and attachments in the log description', () async {
+    final job = Job(
+      id: 'job-desc',
+      title: 'Desc Job',
+      aircraftRef: 'BAE12',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final items = [
+      InspectionItem(
+        id: 'i-1',
+        jobId: job.id,
+        label: 'Brakes',
+        result: InspectionResult.pass,
+        notes: 'Looks good',
+        updatedAt: DateTime(2026, 1, 1),
+      ),
+      InspectionItem(
+        id: 'i-2',
+        jobId: job.id,
+        label: 'Lights',
+        result: InspectionResult.fail,
+        notes: '',
+        updatedAt: DateTime(2026, 1, 1),
+      ),
+    ];
+
+    final atts = [
+      Attachment(
+        id: 'a-1',
+        jobId: job.id,
+        localPath: '/tmp/photo.png',
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        uploaded: false,
+        updatedAt: DateTime(2026, 1, 1),
+      ),
+    ];
+
+    final store = FakeStore(
+      jobs: [job],
+      itemsByJob: {job.id: items},
+      attachmentsByJob: {job.id: atts},
+    );
+    final api = FakeApi();
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    await engine.syncNow();
+
+    expect(api.createLogCalls, 1);
+    final desc = api.createLogDescriptions.single;
+
+    expect(desc.contains('Inspection items:'), true);
+    expect(desc.contains('- Brakes = PASS | notes: Looks good'), true);
+    expect(desc.contains('- Lights = FAIL'), true);
+
+    expect(desc.contains('Attachments:'), true);
+    expect(desc.contains('- photo.png (image/png) [uploaded=false]'), true);
+  });
+
+  // Tests that syncNow uses createUser id when a user clicks the create user button.
+  test('syncNow uses createUser id when createUser succeeds (no login needed)', () async {
+    final job = Job(
+      id: 'job-userid',
+      title: 'UserId Job',
+      aircraftRef: 'BAE13',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final store = FakeStore(jobs: [job]);
+    final api = FakeApi(createUserReturnsId: 777, loginReturnsId: 123);
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    await engine.syncNow();
+
+    expect(api.createUserCalls, 1);
+    expect(api.loginCalls, 0);
+    expect(api.createLogCalls, 1);
+    expect(api.createLogUserIds.single, 777);
+  });
+
+  // Tests that syncNow falls back to login when createUser fails and instead uses login id.
+  test('syncNow falls back to login when createUser throws, and uses login id', () async {
+    final job = Job(
+      id: 'job-userid-fallback',
+      title: 'UserId Fallback Job',
+      aircraftRef: 'BAE14',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    );
+
+    final store = FakeStore(jobs: [job]);
+    final api = FakeApi(createUserReturnsId: null, loginReturnsId: 456);
+
+    final engine = SyncEngine(
+      store: store,
+      api: api,
+      username: 'student_user',
+      password: 'password123',
+    );
+
+    await engine.syncNow();
+
+    expect(api.createUserCalls, 1);
+    expect(api.loginCalls, 1);
+    expect(api.createLogCalls, 1);
+    expect(api.createLogUserIds.single, 456);
   });
 }
