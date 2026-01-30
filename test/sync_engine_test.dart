@@ -64,13 +64,13 @@ class FakeStore implements LocalStoreContract {
   @override
   Future<void> deleteInspectionItem(String id) async {
     for (final key in _itemsByJob.keys) {
-      _itemsByJob[key] = (_itemsByJob[key] ?? []).where((i) => i.id != id).toList();
+      _itemsByJob[key] =
+          (_itemsByJob[key] ?? []).where((i) => i.id != id).toList();
     }
   }
 
   @override
-  Future<void> ensureDefaultChecklist(String jobId) async {
-  }
+  Future<void> ensureDefaultChecklist(String jobId) async {}
 
   @override
   Future<List<Attachment>> getAttachmentsForJob(String jobId) async =>
@@ -110,8 +110,7 @@ class FakeStore implements LocalStoreContract {
   }
 
   @override
-  Future<void> close() async {
-  }
+  Future<void> close() async {}
 }
 
 class FakeApi implements ApiClient {
@@ -587,4 +586,43 @@ void main() {
     expect(api.createLogCalls, 1);
     expect(api.createLogUserIds.single, 456);
   });
+
+  // Verifies syncNow completes within a reasonable time for small payloads.
+  test('syncNow completes within a reasonable time for a typical payload', () async {
+  final jobs = List.generate(
+    10,
+    (i) => Job(
+      id: 'job-perf-$i',
+      title: 'Perf Job $i',
+      aircraftRef: 'AC-$i',
+      status: JobStatus.open,
+      updatedAt: DateTime(2026, 1, 1),
+      syncStatus: SyncStatus.pending,
+    ),
+  );
+
+  final store = FakeStore(jobs: jobs);
+  final api = FakeApi();
+
+  final engine = SyncEngine(
+    store: store,
+    api: api,
+    username: 'student_user',
+    password: 'password123',
+  );
+
+  final sw = Stopwatch()..start();
+  final summary = await engine.syncNow();
+  sw.stop();
+
+  expect(summary.synced, 10);
+  expect(summary.failed, 0);
+
+  final ms = sw.elapsedMilliseconds;
+  expect(
+    ms < 2000,
+    true,
+    reason: 'syncNow took ${ms}ms (expected < 2000ms)',
+  );
+});
 }
