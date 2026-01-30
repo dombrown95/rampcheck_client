@@ -28,7 +28,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'RampCheck',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
       ),
 
       home: AuthGate(store: store),

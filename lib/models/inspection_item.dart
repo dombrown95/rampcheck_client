@@ -1,9 +1,7 @@
-// lib/models/inspection_item.dart
-
 enum InspectionResult {
   pass,
   fail,
-  na, // not applicable
+  na,
 }
 
 String _enumToString(Object e) => e.toString().split('.').last;

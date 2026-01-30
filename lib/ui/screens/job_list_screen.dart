@@ -65,7 +65,7 @@ class _JobListScreenState extends State<JobListScreen> {
     );
 
     try {
-      // Optional UX: mark all pending jobs as "syncing" while the sync runs
+      // Marks all pending jobs as "syncing" while the sync runs.
       await widget.store.markAllPendingJobsSyncing();
 
       final result = await engine.syncNow();
@@ -86,7 +86,7 @@ class _JobListScreenState extends State<JobListScreen> {
         SnackBar(content: Text('Sync failed: $e')),
       );
     } finally {
-      // Refresh again to reflect final states (clean/failed) if needed
+      // Refreshes to reflect final states (synced/failed)
       await _refresh();
     }
   }
@@ -220,6 +220,9 @@ class _JobListScreenState extends State<JobListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        elevation: 0,
         title: const Text('RampCheck — Jobs'),
         actions: [
           IconButton(
