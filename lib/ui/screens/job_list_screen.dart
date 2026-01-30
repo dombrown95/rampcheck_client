@@ -175,8 +175,9 @@ class _JobListScreenState extends State<JobListScreen> {
   String _statusLabel(JobStatus status) {
     return switch (status) {
       JobStatus.open => 'Open',
-      JobStatus.inProgress => 'In progress',
-      JobStatus.closed => 'Closed',
+      JobStatus.inProgress => 'In Progress',
+      JobStatus.onHold => 'On Hold',
+      JobStatus.completed => 'Completed',
     };
   }
 
@@ -268,60 +269,87 @@ class _JobListScreenState extends State<JobListScreen> {
             return const Center(child: Text('No jobs yet. Tap + to create one.'));
           }
 
+          final groups = <JobStatus, List<Job>>{
+            for (final s in JobStatus.values) s: [],
+          };
+          for (final job in jobs) {
+            groups[job.status]?.add(job);
+          }
+
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView.separated(
+            child: ListView(
               padding: const EdgeInsets.all(12),
-              itemCount: jobs.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final job = jobs[index];
-                final syncColor = _syncColor(job.syncStatus);
-
-                return Card(
-                  child: ListTile(
-                    title: Text(job.title),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${job.aircraftRef} • ${_statusLabel(job.status)}'),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(_syncIcon(job.syncStatus), size: 16, color: syncColor),
-                            const SizedBox(width: 6),
-                            Text(
-                              _syncLabel(job.syncStatus),
-                              style: TextStyle(
-                                color: syncColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
+              children: [
+                for (final status in JobStatus.values) ...[
+                  if ((groups[status] ?? []).isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                      child: Text(
+                        '${_statusLabel(status)} (${groups[status]!.length})',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
                             ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => JobDetailScreen(
-                            store: widget.store,
-                            jobId: job.id,
-                            jobTitle: job.title,
-                            aircraftRef: job.aircraftRef,
+                    ...groups[status]!.map((job) {
+                      final syncColor = _syncColor(job.syncStatus);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          child: ListTile(
+                            title: Text(job.title),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${job.aircraftRef} • ${_statusLabel(job.status)}'),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _syncIcon(job.syncStatus),
+                                      size: 16,
+                                      color: syncColor,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _syncLabel(job.syncStatus),
+                                      style: TextStyle(
+                                        color: syncColor,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => JobDetailScreen(
+                                    store: widget.store,
+                                    jobId: job.id,
+                                    jobTitle: job.title,
+                                    aircraftRef: job.aircraftRef,
+                                  ),
+                                ),
+                              );
+                              await _refresh();
+                            },
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: 'Delete',
+                              onPressed: () => _deleteJob(job),
+                            ),
                           ),
                         ),
                       );
-                    },
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete',
-                      onPressed: () => _deleteJob(job),
-                    ),
-                  ),
-                );
-              },
+                    }),
+                  ],
+                ],
+              ],
             ),
           );
         },

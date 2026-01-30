@@ -1,9 +1,8 @@
-// lib/models/job.dart
-
 enum JobStatus {
-  open,
-  inProgress,
-  closed,
+  open,       // open and not yet started
+  inProgress, // work has started
+  onHold,     // temporarily paused
+  completed,  // work completed
 }
 
 enum SyncStatus {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../data/local/local_store.dart';
 import '../../models/attachment.dart';
 import '../../models/inspection_item.dart';
+import '../../models/job.dart';
 
 class JobDetailScreen extends StatefulWidget {
   const JobDetailScreen({
@@ -26,12 +27,23 @@ class JobDetailScreen extends StatefulWidget {
 class _JobDetailScreenState extends State<JobDetailScreen> {
   late Future<List<InspectionItem>> _itemsFuture;
   late Future<List<Attachment>> _attachmentsFuture;
+  late Future<Job?> _jobFuture;
 
   @override
   void initState() {
     super.initState();
     _itemsFuture = _loadItems();
     _attachmentsFuture = _loadAttachments();
+    _jobFuture = _loadJob();
+  }
+
+  Future<Job?> _loadJob() async {
+    final jobs = await widget.store.getJobs();
+    try {
+      return jobs.firstWhere((j) => j.id == widget.jobId);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<List<InspectionItem>> _loadItems() async {
@@ -48,7 +60,28 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     setState(() {
       _itemsFuture = _loadItems();
       _attachmentsFuture = _loadAttachments();
+      _jobFuture = _loadJob();
     });
+  }
+
+  String _statusLabel(JobStatus status) {
+    return switch (status) {
+      JobStatus.open => 'Open',
+      JobStatus.inProgress => 'In Progress',
+      JobStatus.onHold => 'On Hold',
+      JobStatus.completed => 'Completed',
+    };
+  }
+
+  Future<void> _setJobStatus(Job job, JobStatus newStatus) async {
+    final updated = job.copyWith(
+      status: newStatus,
+      updatedAt: DateTime.now(),
+      syncStatus: SyncStatus.pending,
+    );
+
+    await widget.store.upsertJob(updated);
+    await _refresh();
   }
 
   // Sets card tint based on result.
@@ -59,7 +92,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       InspectionResult.na => null,
     };
   }
-
 
   Color _foregroundColor(InspectionResult result) {
     return Colors.black87;
@@ -243,6 +275,42 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             Text(widget.jobTitle, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(widget.aircraftRef),
+            const SizedBox(height: 12),
+
+            FutureBuilder<Job?>(
+              future: _jobFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(height: 0);
+                }
+
+                final job = snapshot.data;
+                if (job == null) {
+                  return const SizedBox(height: 0);
+                }
+
+                return DropdownButtonFormField<JobStatus>(
+                  initialValue: job.status,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: JobStatus.values
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(_statusLabel(s)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    _setJobStatus(job, v);
+                  },
+                );
+              },
+            ),
+
             const SizedBox(height: 16),
 
             // Attachments header and add button

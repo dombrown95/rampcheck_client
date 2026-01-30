@@ -139,9 +139,10 @@ class SyncEngine {
 
   String _mapJobStatus(JobStatus s) {
     return switch (s) {
-      JobStatus.closed => 'closed',
-      JobStatus.inProgress => 'open',
       JobStatus.open => 'open',
+      JobStatus.inProgress => 'open',
+      JobStatus.onHold => 'open',
+      JobStatus.completed => 'closed',
     };
   }
 
