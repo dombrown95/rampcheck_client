@@ -88,6 +88,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+
+    // Responsive width for the login form depending on device.
+    final widthFactor = screenWidth < 600 ? 1.0 : 0.5;
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -116,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       body: Center(
         child: FractionallySizedBox(
-          widthFactor: 0.5,
+          widthFactor: widthFactor,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
@@ -147,6 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Expanded(
                         child: ElevatedButton(
@@ -158,7 +164,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: _busy ? null : _createAccount,
-                          child: const Text('Create account'),
+                          child: const Text(
+                            'Create account',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                     ],
