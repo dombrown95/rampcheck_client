@@ -51,22 +51,18 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     });
   }
 
-  // Sets card tint to green for pass, red for fail, none for N/A.
+  // Sets card tint based on result.
   Color? _cardTint(InspectionResult result) {
     return switch (result) {
-      InspectionResult.pass => Colors.green.withValues(alpha: 20),
-      InspectionResult.fail => Colors.red.withValues(alpha: 20),
+      InspectionResult.pass => Colors.green.withValues(alpha: 0.20),
+      InspectionResult.fail => Colors.red.withValues(alpha: 0.20),
       InspectionResult.na => null,
     };
   }
 
-  // Sets colour for results and icons.
-  Color _resultColor(InspectionResult result) {
-    return switch (result) {
-      InspectionResult.pass => Colors.green,
-      InspectionResult.fail => Colors.red,
-      InspectionResult.na => Colors.grey,
-    };
+
+  Color _foregroundColor(InspectionResult result) {
+    return Colors.black87;
   }
 
   // Sets icon for results.
@@ -164,13 +160,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       withData: false,
     );
 
-    if (!mounted) return;
-
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.single;
     final path = file.path;
     if (path == null || path.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not read file path.')),
       );
@@ -250,7 +245,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             Text(widget.aircraftRef),
             const SizedBox(height: 16),
 
-            // Attachments header + add button
+            // Attachments header and add button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -334,17 +329,23 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final item = items[index];
-                        final color = _resultColor(item.result);
+                        final fg = _foregroundColor(item.result);
 
                         return Card(
                           color: _cardTint(item.result),
                           child: ListTile(
-                            leading: Icon(_resultIcon(item.result), color: color),
-                            title: Text(item.label),
+                            leading: Icon(_resultIcon(item.result), color: fg),
+                            title: Text(
+                              item.label,
+                              style: TextStyle(
+                                color: fg,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             subtitle: Text(
                               _resultLabel(item.result),
                               style: TextStyle(
-                                color: color,
+                                color: fg,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
