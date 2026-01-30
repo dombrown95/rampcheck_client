@@ -6,6 +6,7 @@ import '../../models/job.dart';
 import '../../models/session.dart';
 import '../../sync/sync_engine.dart';
 import 'job_detail_screen.dart';
+import 'login_screen.dart';
 
 class JobListScreen extends StatefulWidget {
   const JobListScreen({
@@ -38,11 +39,36 @@ class _JobListScreenState extends State<JobListScreen> {
   }
 
   Future<void> _logout() async {
-    await widget.store.clearSession();
-    if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Log out?'),
+      content: const Text('You will need to log in again to access your jobs.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Log out'),
+        ),
+      ],
+    ),
+  );
 
+  if (confirm != true) return;
+
+  await widget.store.clearSession();
+  if (!mounted) return;
+
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(
+      builder: (_) => LoginScreen(store: widget.store),
+    ),
+    (route) => false,
+  );
+}
   Future<void> _syncNow() async {
     final isAndroid = Theme.of(context).platform == TargetPlatform.android;
 
