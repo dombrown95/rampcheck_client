@@ -89,51 +89,84 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('RampCheck — Sign in')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      appBar: AppBar(
+        title: Row(
           children: [
-            TextField(
-              controller: _user,
-              decoration: const InputDecoration(labelText: 'Username'),
-              textInputAction: TextInputAction.next,
-            ),
-            TextField(
-              controller: _pass,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _role,
-              decoration: const InputDecoration(labelText: 'Role'),
-              items: const [
-                DropdownMenuItem(value: 'manager', child: Text('manager')),
-                DropdownMenuItem(value: 'worker', child: Text('worker')),
-              ],
-              onChanged: (v) => setState(() => _role = v ?? 'manager'),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _busy ? null : _login,
-                    child: Text(_busy ? 'Please wait…' : 'Log in'),
-                  ),
+            ClipOval(
+              child: Container(
+                width: 32,
+                height: 32,
+                color: Colors.white,
+                padding: const EdgeInsets.all(4),
+                child: Image.asset(
+                  'assets/images/rampcheck_logo.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) =>
+                      const Icon(Icons.flight_takeoff, size: 18),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy ? null : _createAccount,
-                    child: const Text('Create account'),
-                  ),
-                ),
-              ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'RampCheck — Sign in',
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
+        ),
+      ),
+      body: Center(
+        child: FractionallySizedBox(
+          widthFactor: 0.5,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _user,
+                    decoration: const InputDecoration(labelText: 'Username'),
+                    textInputAction: TextInputAction.next,
+                  ),
+                  TextField(
+                    controller: _pass,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    textInputAction: TextInputAction.done,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _role,
+                    decoration: const InputDecoration(labelText: 'Role'),
+                    items: const [
+                      DropdownMenuItem(value: 'manager', child: Text('Manager')),
+                      DropdownMenuItem(value: 'worker', child: Text('Worker')),
+                    ],
+                    onChanged: (v) => setState(() => _role = v ?? 'manager'),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _busy ? null : _login,
+                          child: Text(_busy ? 'Please wait…' : 'Log in'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _busy ? null : _createAccount,
+                          child: const Text('Create account'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
