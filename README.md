@@ -1,4 +1,10 @@
-# RampCheck
+<p align="center">
+  <img src="assets/images/rampcheck_logo.png" alt="RampCheck logo" width="120"/>
+</p>
+
+<h1 align="center">RampCheck </h1>
+
+## Overview
 
 RampCheck is a cross-platform Flutter application that supports aircraft ramp inspection workflows.  
 
