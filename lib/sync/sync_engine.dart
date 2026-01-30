@@ -1,8 +1,8 @@
 import '../../models/attachment.dart';
 import '../../models/inspection_item.dart';
 import '../../models/job.dart';
-import '../data/remote/api_client_contract.dart';
 import '../data/local/local_store_contract.dart';
+import '../data/remote/api_client_contract.dart';
 
 class SyncEngine {
   SyncEngine({
@@ -24,10 +24,19 @@ class SyncEngine {
   /// Syncs all pending jobs to the API by creating /logs entries.
   Future<SyncSummary> syncNow() async {
     final jobs = await store.getJobs();
-    final pending = jobs.where((j) => j.syncStatus == SyncStatus.pending).toList();
 
-    if (pending.isEmpty) {
-      return const SyncSummary(synced: 0, failed: 0, message: 'No pending jobs to sync.');
+    final toSync = jobs
+        .where((j) =>
+            j.syncStatus == SyncStatus.pending ||
+            j.syncStatus == SyncStatus.syncing)
+        .toList();
+
+    if (toSync.isEmpty) {
+      return const SyncSummary(
+        synced: 0,
+        failed: 0,
+        message: 'No pending jobs to sync.',
+      );
     }
 
     final userId = await _ensureUserId();
@@ -36,8 +45,16 @@ class SyncEngine {
     var failed = 0;
     final errors = <String>[];
 
-    for (final job in pending) {
+    for (final job in toSync) {
       try {
+        // Marks as syncing before API call is attempted.
+        await store.upsertJob(
+          job.copyWith(
+            syncStatus: SyncStatus.syncing,
+            updatedAt: DateTime.now(),
+          ),
+        );
+
         final description = await _buildJobDescription(jobId: job.id);
         final status = _mapJobStatus(job.status);
 
@@ -49,7 +66,7 @@ class SyncEngine {
           userId: userId,
         );
 
-        // Marks job as synced locally if sync succeeds.
+        // Mark clean if sync succeeds.
         await store.upsertJob(
           job.copyWith(
             syncStatus: SyncStatus.clean,
@@ -62,7 +79,7 @@ class SyncEngine {
         failed++;
         errors.add('Job ${job.id}: $e');
 
-        // Marks job as failed if sync fails.
+        // Mark failed if sync fails.
         await store.upsertJob(
           job.copyWith(
             syncStatus: SyncStatus.failed,
@@ -76,7 +93,27 @@ class SyncEngine {
         ? 'Sync complete: $synced job(s) synced.'
         : 'Sync complete: $synced synced, $failed failed.';
 
-    return SyncSummary(synced: synced, failed: failed, message: msg, errors: errors);
+    return SyncSummary(
+      synced: synced,
+      failed: failed,
+      message: msg,
+      errors: errors,
+    );
+  }
+
+  // ---- user id helpers ----
+
+  int? _extractIntId(Map<String, dynamic> m) {
+    dynamic v = m['id'] ?? m['user_id'];
+
+    if (v == null && m['user'] is Map) {
+      final user = (m['user'] as Map).cast<String, dynamic>();
+      v = user['id'] ?? user['user_id'];
+    }
+
+    if (v is int) return v;
+    if (v is String) return int.tryParse(v);
+    return null;
   }
 
   Future<int> _ensureUserId() async {
@@ -86,18 +123,18 @@ class SyncEngine {
         password: password,
         role: role,
       );
-      final id = created['id'];
-      if (id is int) return id;
-      if (id is String) return int.parse(id);
+      final id = _extractIntId(created);
+      if (id != null) return id;
     } catch (_) {
     }
 
+    // Falls back to login
     final loggedIn = await api.login(username: username, password: password);
-    final id = loggedIn['id'];
-    if (id is int) return id;
-    if (id is String) return int.parse(id);
+    final id = _extractIntId(loggedIn);
+    if (id != null) return id;
 
-    throw Exception('Could not determine user id from API response.');
+    // Include response to enable debugging
+    throw Exception('Could not determine user id. Login response: $loggedIn');
   }
 
   String _mapJobStatus(JobStatus s) {
@@ -115,8 +152,10 @@ class SyncEngine {
     final b = StringBuffer();
     b.writeln('Inspection items:');
     for (final InspectionItem i in items) {
-      b.writeln('- ${i.label} = ${_resultLabel(i.result)}'
-          '${i.notes.trim().isEmpty ? '' : ' | notes: ${i.notes.trim()}'}');
+      b.writeln(
+        '- ${i.label} = ${_resultLabel(i.result)}'
+        '${i.notes.trim().isEmpty ? '' : ' | notes: ${i.notes.trim()}'}',
+      );
     }
 
     if (atts.isNotEmpty) {

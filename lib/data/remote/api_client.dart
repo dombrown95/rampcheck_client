@@ -23,6 +23,30 @@ class WarehouseApiClient implements ApiClient {
         'X-API-Key': apiKey,
       };
 
+  Map<String, dynamic> _decodeOrThrow(http.Response res, {required String context}) {
+    Map<String, dynamic> body;
+
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) {
+        body = decoded;
+      } else if (decoded is Map) {
+        body = decoded.cast<String, dynamic>();
+      } else {
+        throw ApiException('Expected JSON object but got: $decoded');
+      }
+    } catch (e) {
+      throw ApiException('API error in $context: HTTP ${res.statusCode} - ${res.body}');
+    }
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      final msg = body['error'] ?? body['message'] ?? res.body;
+      throw ApiException('API error in $context: HTTP ${res.statusCode} - $msg');
+    }
+
+    return body;
+  }
+
   @override
   Future<Map<String, dynamic>> createUser({
     required String username,
@@ -41,8 +65,7 @@ class WarehouseApiClient implements ApiClient {
         )
         .timeout(const Duration(seconds: 10));
 
-    _throwIfBad(res, context: 'createUser');
-    return _decodeMap(res.body);
+    return _decodeOrThrow(res, context: 'createUser');
   }
 
   @override
@@ -61,8 +84,7 @@ class WarehouseApiClient implements ApiClient {
         )
         .timeout(const Duration(seconds: 10));
 
-    _throwIfBad(res, context: 'login');
-    return _decodeMap(res.body);
+    return _decodeOrThrow(res, context: 'login');
   }
 
   @override
@@ -87,21 +109,7 @@ class WarehouseApiClient implements ApiClient {
         )
         .timeout(const Duration(seconds: 15));
 
-    _throwIfBad(res, context: 'createLog');
-    return _decodeMap(res.body);
-  }
-
-  Map<String, dynamic> _decodeMap(String body) {
-    final decoded = jsonDecode(body);
-    if (decoded is Map<String, dynamic>) return decoded;
-    throw ApiException('Expected JSON object, got: $decoded');
-  }
-
-  void _throwIfBad(http.Response res, {required String context}) {
-    if (res.statusCode >= 200 && res.statusCode < 300) return;
-    throw ApiException(
-      'API error in $context: HTTP ${res.statusCode} - ${res.body}',
-    );
+    return _decodeOrThrow(res, context: 'createLog');
   }
 
   void dispose() => _http.close();
