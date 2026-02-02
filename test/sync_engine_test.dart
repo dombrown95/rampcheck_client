@@ -182,7 +182,7 @@ class FakeApi implements ApiClient {
 }
 
 void main() {
-  // Tests that when the API succeeds, the job is marked as clean.
+  // TC01: Tests that when the API succeeds, the job is marked as clean.
   test('syncNow marks pending jobs as clean when API succeeds', () async {
     final job = Job(
       id: 'job-1',
@@ -213,7 +213,7 @@ void main() {
     expect(updated.syncStatus, SyncStatus.clean);
   });
 
-  // Tests that when the API fails, the job is marked as failed.
+  // TC02: Tests that when the API fails, the job is marked as failed.
   test('syncNow marks pending jobs as failed when API fails', () async {
     final job = Job(
       id: 'job-2',
@@ -245,7 +245,7 @@ void main() {
     expect(updated.syncStatus, SyncStatus.failed);
   });
 
-  // Tests that when there are no pending jobs, syncNow returns early.
+  // TC03:Tests that when there are no pending jobs, syncNow returns early.
   test('syncNow returns "No pending jobs" and makes no API calls when nothing to sync', () async {
     final job = Job(
       id: 'job-clean',
@@ -276,7 +276,7 @@ void main() {
     expect(api.createUserCalls, 0);
   });
 
-  // Tests that jobs with syncStatus=syncing are also included in the sync set.
+  // TC04: Tests that jobs with syncStatus=syncing are also included in the sync set.
   test('syncNow includes jobs with syncStatus=syncing in the sync set', () async {
     final job = Job(
       id: 'job-syncing',
@@ -307,7 +307,7 @@ void main() {
     expect(updated.syncStatus, SyncStatus.clean);
   });
 
-  // Tests that an intermediate "syncing" state is upserted before marking clean.
+  // TC05: Tests that an intermediate "syncing" state is upserted before marking clean.
   test('syncNow upserts an intermediate syncing state before marking clean', () async {
     final job = Job(
       id: 'job-intermediate',
@@ -341,7 +341,7 @@ void main() {
     expect(hasCleanUpsert, true);
   });
 
-  // Tests a scenario with multiple jobs where some succeed and some fail.
+  // TC06: Tests a scenario with multiple jobs where some succeed and some fail.
   test('syncNow handles multiple jobs and reports partial failures', () async {
     final job1 = Job(
       id: 'job-a',
@@ -388,7 +388,7 @@ void main() {
     expect(b.syncStatus, SyncStatus.failed);
   });
 
-  // Tests that syncNow maps JobStatus.completed to API status "closed".
+  // TC07:Tests that syncNow maps JobStatus.completed to API status "closed".
   test('syncNow maps JobStatus.completed to API status "closed"', () async {
     final job = Job(
       id: 'job-completed',
@@ -415,7 +415,7 @@ void main() {
     expect(api.createLogStatuses.single, 'closed');
   });
 
-  // Tests that syncNow maps Open/In Progress/On Hold to API status "open".
+  // TC08: Tests that syncNow maps Open/In Progress/On Hold to API status "open".
   test('syncNow maps open/inProgress/onHold to API status "open"', () async {
     final jobs = <Job>[
       Job(
@@ -460,7 +460,7 @@ void main() {
     expect(api.createLogStatuses, ['open', 'open', 'open']);
   });
 
-  // Tests that inspection items and attachments are included in the log description.
+  // TC09: Tests that inspection items and attachments are included in the log description.
   test('syncNow includes inspection items and attachments in the log description', () async {
     final job = Job(
       id: 'job-desc',
@@ -529,7 +529,7 @@ void main() {
     expect(desc.contains('- photo.png (image/png) [uploaded=false]'), true);
   });
 
-  // Tests that syncNow uses createUser id when a user clicks the create user button.
+  // TC10: Tests that syncNow uses createUser id when a user clicks the create user button.
   test('syncNow uses createUser id when createUser succeeds (no login needed)', () async {
     final job = Job(
       id: 'job-userid',
@@ -558,7 +558,7 @@ void main() {
     expect(api.createLogUserIds.single, 777);
   });
 
-  // Tests that syncNow falls back to login when createUser fails and instead uses login id.
+  // TC11: Tests that syncNow falls back to login when createUser fails and instead uses login id.
   test('syncNow falls back to login when createUser throws, and uses login id', () async {
     final job = Job(
       id: 'job-userid-fallback',
@@ -587,7 +587,7 @@ void main() {
     expect(api.createLogUserIds.single, 456);
   });
 
-  // Verifies syncNow completes within a reasonable time for small payloads.
+  // TC12: Verifies syncNow completes within a reasonable time for small payloads.
   test('syncNow completes within a reasonable time for a typical payload', () async {
   final jobs = List.generate(
     10,
